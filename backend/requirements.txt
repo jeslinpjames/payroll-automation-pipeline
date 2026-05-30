@@ -2,6 +2,8 @@
 fastapi==0.110.0
 uvicorn==0.27.1
 python-multipart==0.0.9    # Required for handling file uploads
+pydantic-settings==2.2.1   # Required for configuration management
+email-validator==2.1.1     # Required by Pydantic for EmailStr validation
 
 # Data Parsing
 pandas==2.2.1
@@ -9,7 +11,7 @@ openpyxl==3.1.2            # Required if handling .xlsx files
 
 # PDF Generation & Security
 fpdf2==2.7.8               # Modern, clean library for building PDFs
-PyPDF2==3.0.1              # For adding password protection (The Bonus Feature)
+pypdf==4.2.0               # Modern fork for password protection (Replaces PyPDF2)
 
 # Email & Templating
 jinja2==3.1.3              # For injecting dynamic names into HTML emails
