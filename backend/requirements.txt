@@ -1,0 +1,16 @@
+# Web Framework
+fastapi==0.110.0
+uvicorn==0.27.1
+python-multipart==0.0.9    # Required for handling file uploads
+
+# Data Parsing
+pandas==2.2.1
+openpyxl==3.1.2            # Required if handling .xlsx files
+
+# PDF Generation & Security
+fpdf2==2.7.8               # Modern, clean library for building PDFs
+PyPDF2==3.0.1              # For adding password protection (The Bonus Feature)
+
+# Email & Templating
+jinja2==3.1.3              # For injecting dynamic names into HTML emails
+python-dotenv==1.0.1       # For loading SMTP credentials safely
