@@ -1,1 +1,23 @@
+# Virtual Environments
 venv/
+env/
+.venv/
+
+# Environment Variables (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated Files
+*.pdf
+*.csv
+*.xlsx
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
