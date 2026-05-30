@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
 
+    # ---- Business / storage ----
+    company_name: str = "Nippon Toyota"
+    database_path: str = "payroll.db"
+
     # ---- CORS ----
     # Comma-separated list in .env, e.g.
     # CORS_ORIGINS=http://localhost:3000,https://your-app.vercel.app
