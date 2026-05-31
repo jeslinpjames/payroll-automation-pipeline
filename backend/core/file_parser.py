@@ -17,6 +17,7 @@ throughout — never float — to avoid rounding errors on payroll figures.
 from __future__ import annotations
 
 import io
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Iterable
 
@@ -173,15 +174,13 @@ class ParseResult(BaseModel):
 
 
 def _normalize_header(header: str) -> str:
-    """Reduce a header to a comparable key: lowercase, no spaces/_/-."""
-    return (
-        str(header)
-        .strip()
-        .lower()
-        .replace(" ", "")
-        .replace("_", "")
-        .replace("-", "")
-    )
+    """Reduce a header to a comparable key: lowercase, alphanumerics only.
+
+    Strips spaces, underscores, hyphens, slashes, dots, parentheses, etc. so
+    "Employee ID", "employee_id", "Employee-Id" and "Month/Year" all collapse
+    to a single comparable token.
+    """
+    return re.sub(r"[^a-z0-9]", "", str(header).strip().lower())
 
 
 def _read_tabular(content: bytes, filename: str) -> pd.DataFrame:
