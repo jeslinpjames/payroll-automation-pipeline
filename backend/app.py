@@ -31,6 +31,7 @@ from core.email_dispatcher import (
     EmailDispatcher,
     EmailDispatchError,
     EmailJob,
+    MailtrapDispatcher,
 )
 from core.file_parser import (
     DataValidationError,
@@ -308,15 +309,25 @@ def _register_routes(app: FastAPI) -> None:
                 results=[],
             )
 
-        dispatcher = EmailDispatcher(
-            host=settings.smtp_host,
-            port=settings.smtp_port,
-            username=settings.smtp_username,
-            password=settings.smtp_password,
-            from_email=str(settings.smtp_from_email or settings.smtp_username),
-            from_name=settings.smtp_from_name,
-            company_name=settings.company_name,
-        )
+        if settings.mailtrap_api_token and settings.mailtrap_inbox_id:
+            # HTTP API path (HTTPS) — bypasses SMTP entirely.
+            dispatcher = MailtrapDispatcher(
+                api_token=settings.mailtrap_api_token,
+                inbox_id=settings.mailtrap_inbox_id,
+                from_email=str(settings.smtp_from_email or "payroll@nippontoyota.com"),
+                from_name=settings.smtp_from_name,
+                company_name=settings.company_name,
+            )
+        else:
+            dispatcher = EmailDispatcher(
+                host=settings.smtp_host,
+                port=settings.smtp_port,
+                username=settings.smtp_username,
+                password=settings.smtp_password,
+                from_email=str(settings.smtp_from_email or settings.smtp_username),
+                from_name=settings.smtp_from_name,
+                company_name=settings.company_name,
+            )
         results = dispatcher.send_salary_slips(jobs)
         sent = sum(1 for r in results if r.success)
         return ProcessResponse(

@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     smtp_from_email: EmailStr | None = None
     smtp_from_name: str = "Payroll Department"
 
+    # ---- Mailtrap HTTP API  ----
+    mailtrap_api_token: str = ""
+    mailtrap_inbox_id: str = ""
+
     # ---- Uploads / limits ----
     max_upload_bytes: int = Field(default=10 * 1024 * 1024)  # 10 MB safety cap
 
