@@ -28,6 +28,7 @@ from pydantic import BaseModel, EmailStr
 
 from config import settings
 from core.email_dispatcher import (
+    BrevoDispatcher,
     EmailDispatcher,
     EmailDispatchError,
     EmailJob,
@@ -309,7 +310,15 @@ def _register_routes(app: FastAPI) -> None:
                 results=[],
             )
 
-        if settings.mailtrap_api_token and settings.mailtrap_inbox_id:
+        if settings.brevo_api_key:
+            # Real delivery over HTTPS (works even where SMTP is blocked).
+            dispatcher = BrevoDispatcher(
+                api_key=settings.brevo_api_key,
+                from_email=str(settings.smtp_from_email or settings.smtp_username or "payroll@nippontoyota.com"),
+                from_name=settings.smtp_from_name,
+                company_name=settings.company_name,
+            )
+        elif settings.mailtrap_api_token and settings.mailtrap_inbox_id:
             # HTTP API path (HTTPS) — bypasses SMTP entirely.
             dispatcher = MailtrapDispatcher(
                 api_token=settings.mailtrap_api_token,

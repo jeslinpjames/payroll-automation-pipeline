@@ -23,6 +23,7 @@ import json
 import logging
 import re
 import smtplib
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -257,6 +258,8 @@ class MailtrapDispatcher:
         template_name: str = "email_template.html",
         sandbox: bool = True,
         timeout: int = 30,
+        max_retries: int = 5,
+        retry_delay: float = 1.5,
     ) -> None:
         self.api_token = api_token
         self.inbox_id = inbox_id
@@ -264,6 +267,8 @@ class MailtrapDispatcher:
         self.from_name = from_name
         self.company_name = company_name
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         if sandbox:
             self.endpoint = f"https://sandbox.api.mailtrap.io/api/send/{inbox_id}"
         else:
@@ -323,6 +328,22 @@ class MailtrapDispatcher:
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             return response.status, response.read().decode("utf-8", "ignore")
 
+    def _send_with_retry(self, payload: dict) -> tuple[int, str]:
+        """POST, retrying on HTTP 429 (rate limit) with a short pacing delay.
+
+        Free Mailtrap inboxes cap throughput at roughly one email/second, so a
+        tight loop trips a 429. Backing off and retrying lets the whole batch
+        through; on a paid plan there are no 429s and this never sleeps.
+        """
+        for attempt in range(self.max_retries):
+            try:
+                return self._post(payload)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429 and attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+                    continue
+                raise
+
     def send_salary_slips(self, jobs: list[EmailJob]) -> list[SendResult]:
         if not jobs:
             return []
@@ -332,7 +353,9 @@ class MailtrapDispatcher:
         results: list[SendResult] = []
         for job in jobs:
             try:
-                status_code, body = self._post(self._build_payload(job, self._render_body(job)))
+                status_code, body = self._send_with_retry(
+                    self._build_payload(job, self._render_body(job))
+                )
                 ok = 200 <= status_code < 300
                 results.append(
                     SendResult(
@@ -362,4 +385,143 @@ class MailtrapDispatcher:
                 )
             except urllib.error.URLError as exc:
                 raise EmailDispatchError(f"Could not reach the Mailtrap API: {exc.reason}") from exc
+        return results
+
+
+# --------------------------------------------------------------------------- #
+# HTTP API dispatcher (Brevo) — real delivery over HTTPS
+# --------------------------------------------------------------------------- #
+
+
+class BrevoDispatcher:
+    """Sends salary slips via Brevo's transactional email HTTP API over HTTPS.
+
+    Same interface as the other dispatchers. Unlike the Mailtrap *sandbox*
+    (which only captures mail), Brevo performs real delivery to any recipient
+    once you've verified a sender address — and because it rides on HTTPS it
+    works on hosts that block outbound SMTP (e.g. Render's free tier).
+    """
+
+    ENDPOINT = "https://api.brevo.com/v3/smtp/email"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        from_email: str,
+        from_name: str = "Payroll Department",
+        company_name: str = "Nippon Toyota",
+        template_dir: str = "templates",
+        template_name: str = "email_template.html",
+        timeout: int = 30,
+        max_retries: int = 5,
+        retry_delay: float = 1.5,
+    ) -> None:
+        self.api_key = api_key
+        self.from_email = from_email
+        self.from_name = from_name
+        self.company_name = company_name
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self._jinja = Environment(
+            loader=FileSystemLoader(template_dir),
+            autoescape=select_autoescape(["html", "xml"]),
+        )
+        self._template_name = template_name
+
+    def _render_body(self, job: EmailJob) -> str:
+        return self._jinja.get_template(self._template_name).render(
+            company_name=self.company_name,
+            employee_name=job.recipient_name,
+            month_year=job.month_year,
+            password_protected=job.password_protected,
+            password_hint=job.password_hint,
+        )
+
+    def _build_payload(self, job: EmailJob, html_body: str) -> dict:
+        return {
+            "sender": {"name": self.from_name, "email": self.from_email},
+            "to": [{"email": job.recipient_email, "name": job.recipient_name}],
+            "subject": f"Salary Slip - {job.month_year}",
+            "htmlContent": html_body,
+            "textContent": (
+                f"Dear {job.recipient_name}, please find attached your salary "
+                f"slip for {job.month_year}."
+            ),
+            "attachment": [
+                {
+                    "content": base64.b64encode(job.pdf_bytes).decode("ascii"),
+                    "name": _safe_filename(job.employee_id, job.month_year),
+                }
+            ],
+        }
+
+    def _post(self, payload: dict) -> tuple[int, str]:
+        request = urllib.request.Request(
+            self.ENDPOINT,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+        )
+        request.add_header("api-key", self.api_key)
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/json")
+        request.add_header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return response.status, response.read().decode("utf-8", "ignore")
+
+    def _send_with_retry(self, payload: dict) -> tuple[int, str]:
+        for attempt in range(self.max_retries):
+            try:
+                return self._post(payload)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429 and attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+                    continue
+                raise
+
+    def send_salary_slips(self, jobs: list[EmailJob]) -> list[SendResult]:
+        if not jobs:
+            return []
+        if not self.api_key:
+            raise EmailDispatchError("Brevo API key is not configured.")
+
+        results: list[SendResult] = []
+        for job in jobs:
+            try:
+                status_code, body = self._send_with_retry(
+                    self._build_payload(job, self._render_body(job))
+                )
+                ok = 200 <= status_code < 300
+                results.append(
+                    SendResult(
+                        job.employee_id,
+                        job.recipient_email,
+                        success=ok,
+                        error=None if ok else f"HTTP {status_code}: {body[:200]}",
+                    )
+                )
+                if ok:
+                    logger.info("Sent slip to %s (%s)", job.recipient_email, job.employee_id)
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", "ignore")[:200]
+                if exc.code in (401, 403):
+                    raise EmailDispatchError(
+                        f"Brevo authentication failed (HTTP {exc.code}): {detail}"
+                    ) from exc
+                logger.warning("Brevo send failed for %s: %s", job.recipient_email, detail)
+                results.append(
+                    SendResult(
+                        job.employee_id,
+                        job.recipient_email,
+                        success=False,
+                        error=f"HTTP {exc.code}: {detail}",
+                    )
+                )
+            except urllib.error.URLError as exc:
+                raise EmailDispatchError(f"Could not reach the Brevo API: {exc.reason}") from exc
         return results

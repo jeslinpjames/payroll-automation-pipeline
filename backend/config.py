@@ -46,9 +46,16 @@ class Settings(BaseSettings):
     smtp_from_email: EmailStr | None = None
     smtp_from_name: str = "Payroll Department"
 
-    # ---- Mailtrap HTTP API  ----
+    # ---- Mailtrap HTTP API (optional alternative to SMTP) ----
+    # When both are set, the app sends over HTTPS via Mailtrap's API instead
+    # of SMTP — useful when local networks/antivirus break SMTP/STARTTLS.
     mailtrap_api_token: str = ""
     mailtrap_inbox_id: str = ""
+
+    # ---- Brevo HTTP API (real delivery over HTTPS) ----
+    # Set this to send real email via Brevo's API. Works on hosts that block
+    # outbound SMTP (e.g. Render free tier). Takes priority over SMTP/Mailtrap.
+    brevo_api_key: str = ""
 
     # ---- Uploads / limits ----
     max_upload_bytes: int = Field(default=10 * 1024 * 1024)  # 10 MB safety cap
