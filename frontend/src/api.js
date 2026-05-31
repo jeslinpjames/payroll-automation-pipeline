@@ -52,6 +52,30 @@ export const api = {
         password_protect: passwordProtect,
       }),
     }),
+
+  // Returns a single slip PDF as a Blob (for inline preview / download).
+  getSlipBlob: async (file, employeeId) => {
+    let res
+    try {
+      res = await fetch(`${BASE_URL}/payroll/slip`, {
+        method: 'POST',
+        body: fileForm(file, { employee_id: employeeId }),
+      })
+    } catch {
+      throw new Error(`Could not reach the backend at ${BASE_URL}.`)
+    }
+    if (!res.ok) {
+      let detail = `Request failed (${res.status})`
+      try {
+        const data = await res.json()
+        detail = data?.detail || data?.error || detail
+      } catch {
+        /* response wasn't JSON */
+      }
+      throw new Error(detail)
+    }
+    return res.blob()
+  },
 }
 
 // Format a number as Indian rupees with lakh/crore digit grouping.

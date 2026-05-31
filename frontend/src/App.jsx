@@ -136,7 +136,9 @@ export default function App() {
         {/* Step 3 — Review + process */}
         <section className={`card ${step === 2 ? 'card--active' : ''} ${step < 2 ? 'card--locked' : ''}`} style={{ animationDelay: '160ms' }}>
           <CardHead n="03" title="Review & dispatch" done={step > 2} />
-          {step >= 2 && preview && <PreviewTable preview={preview} />}
+          {step >= 2 && preview && (
+            <PreviewTable preview={preview} salaryFile={salaryFile} onError={setError} />
+          )}
 
           {step === 2 && (
             <div className="dispatch">

@@ -1,7 +1,37 @@
-import { formatINR } from '../api'
+import { useState } from 'react'
+import { api, formatINR } from '../api'
 
-export default function PreviewTable({ preview }) {
+export default function PreviewTable({ preview, salaryFile, onError }) {
   const { slips, employee_count, salary_row_count, unmatched_employee_ids } = preview
+  const [busy, setBusy] = useState(null) // `${employee_id}:${mode}` currently loading
+
+  const openSlip = async (employeeId, mode) => {
+    if (!salaryFile) {
+      onError?.('Salary file is no longer in memory — re-run the preview.')
+      return
+    }
+    setBusy(`${employeeId}:${mode}`)
+    try {
+      const blob = await api.getSlipBlob(salaryFile, employeeId)
+      const url = URL.createObjectURL(blob)
+      if (mode === 'preview') {
+        window.open(url, '_blank', 'noopener')
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+      } else {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `SalarySlip_${employeeId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch (e) {
+      onError?.(e.message)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <div className="preview">
@@ -33,6 +63,7 @@ export default function PreviewTable({ preview }) {
               <th className="num">Allow.</th>
               <th className="num">Deduct.</th>
               <th className="num">Net Salary</th>
+              <th>Slip</th>
             </tr>
           </thead>
           <tbody>
@@ -46,11 +77,27 @@ export default function PreviewTable({ preview }) {
                 <td className="num">{formatINR(s.allowances)}</td>
                 <td className="num">{formatINR(s.deductions)}</td>
                 <td className="num num--net">{formatINR(s.net_salary)}</td>
+                <td className="row-actions">
+                  <button
+                    className="btn-link"
+                    disabled={busy !== null}
+                    onClick={() => openSlip(s.employee_id, 'preview')}
+                  >
+                    {busy === `${s.employee_id}:preview` ? '…' : 'Preview'}
+                  </button>
+                  <button
+                    className="btn-link"
+                    disabled={busy !== null}
+                    onClick={() => openSlip(s.employee_id, 'download')}
+                  >
+                    {busy === `${s.employee_id}:download` ? '…' : 'Download'}
+                  </button>
+                </td>
               </tr>
             ))}
             {slips.length === 0 && (
               <tr>
-                <td colSpan={8} className="empty-cell">
+                <td colSpan={9} className="empty-cell">
                   No matching salary slips. Upload employees first, then a salary sheet whose
                   Employee IDs match.
                 </td>

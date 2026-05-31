@@ -18,9 +18,10 @@ All business logic lives in core/; this layer only translates HTTP <-> models.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
@@ -230,6 +231,41 @@ def _register_routes(app: FastAPI) -> None:
             employee_count=len(employees),
             salary_row_count=len(salaries),
             unmatched_employee_ids=unmatched,
+        )
+
+    @app.post("/payroll/slip", tags=["payroll"])
+    async def get_slip(
+        file: UploadFile = File(...),
+        employee_id: str = Form(...),
+        password_protect: bool = Form(False),
+    ) -> Response:
+        """Generate and return a single employee's salary slip as a PDF.
+
+        Used by the dashboard's per-row Preview/Download buttons. Defaults to
+        an unprotected PDF (the admin is viewing it pre-send); pass
+        password_protect=true to mirror the encrypted emailed copy.
+        """
+        content = await _read_upload(file)
+        salaries = parse_salaries(content, file.filename or "salary.csv")
+        employees = store.get_all()
+        slips, _ = merge_records(employees, salaries)
+
+        slip = next((s for s in slips if s.employee_id == employee_id), None)
+        if slip is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No salary slip found for Employee ID '{employee_id}'.",
+            )
+
+        pwd = derive_pdf_password(slip) if password_protect else None
+        pdf_bytes = generate_salary_slip(
+            slip, company_name=settings.company_name, password=pwd
+        )
+        safe = re.sub(r"[^A-Za-z0-9]+", "_", f"{slip.employee_id}_{slip.month_year}").strip("_")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="SalarySlip_{safe}.pdf"'},
         )
 
     @app.post("/payroll/process", response_model=ProcessResponse, tags=["payroll"])
