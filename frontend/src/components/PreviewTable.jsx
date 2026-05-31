@@ -15,7 +15,13 @@ export default function PreviewTable({ preview, salaryFile, onError }) {
       const blob = await api.getSlipBlob(salaryFile, employeeId)
       const url = URL.createObjectURL(blob)
       if (mode === 'preview') {
-        window.open(url, '_blank', 'noopener')
+        const a = document.createElement('a')
+        a.href = url
+        a.target = '_blank'
+        a.rel = 'noopener'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
         setTimeout(() => URL.revokeObjectURL(url), 60000)
       } else {
         const a = document.createElement('a')
