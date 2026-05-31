@@ -1,0 +1,32 @@
+# Render Blueprint — one-click deploy for the FastAPI backend.
+# Secrets (SMTP creds, CORS_ORIGINS) are marked sync:false and entered in the
+# Render dashboard rather than committed here.
+services:
+  - type: web
+    name: payroll-automation-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      - key: COMPANY_NAME
+        value: "Nippon Toyota"
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_FROM_NAME
+        value: "Payroll Department"
+      # --- set these in the dashboard (secrets / environment-specific) ---
+      - key: CORS_ORIGINS          
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
